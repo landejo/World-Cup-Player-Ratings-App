@@ -1,0 +1,47 @@
+name: Update tournament matches
+
+# Auto-refresh the published tournament: discover newly-released FIFA Post-Match
+# Summary reports, re-rate every match with the shipped model, and commit
+# matches.json when it changes. Pages then redeploys automatically.
+
+on:
+  schedule:
+    - cron: '13 */4 * * *'     # every 4 hours
+  workflow_dispatch: {}         # ...or run it on demand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-matches
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install builder deps
+        working-directory: scripts
+        run: npm install --no-audit --no-fund
+
+      - name: Rebuild matches.json from the FIFA hub
+        run: node scripts/build-matches.mjs
+
+      - name: Commit if changed
+        run: |
+          if [ -n "$(git status --porcelain matches.json)" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add matches.json
+            git commit -m "Auto-update tournament matches ($(date -u '+%Y-%m-%d %H:%M UTC'))"
+            git push
+            echo "Updated matches.json."
+          else
+            echo "No new matches."
+          fi

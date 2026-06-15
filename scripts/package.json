@@ -1,0 +1,8 @@
+{
+  "name": "match-ratings-builder",
+  "private": true,
+  "type": "module",
+  "description": "Discovers FIFA PMSRs and regenerates matches.json (run by the GitHub Action)",
+  "scripts": { "build": "node build-matches.mjs" },
+  "dependencies": { "pdfjs-dist": "3.11.174" }
+}
