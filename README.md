@@ -2,7 +2,7 @@
 
 Upload a FIFA **Post-Match Summary Report (PMSR)** PDF and get every player rated out of 10, using a replicable weighted-action model (v4.4). Everything runs in your browser — **the PDF never leaves your device.**
 
-**Live:** https://landejo.github.io/World-Cup-Player-Ratings-App/
+**Live:** https://jasonlande.com/World-Cup-Player-Ratings-App/
 
 ## Use it
 1. Open the live link.
