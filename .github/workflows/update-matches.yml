@@ -6,7 +6,13 @@ name: Update tournament matches
 
 on:
   schedule:
-    - cron: '13 */4 * * *'     # every 4 hours
+    # Cron is UTC (GitHub Actions has no timezone support). The 2026 World Cup
+    # (11 Jun – 19 Jul) runs entirely in Pacific Daylight Time = UTC-7, so:
+    - cron: '0 15 * * *'    # 08:00 PT
+    - cron: '0 19 * * *'    # 12:00 PT
+    - cron: '0 23 * * *'    # 16:00 PT
+    - cron: '0 3 * * *'     # 20:00 PT
+    - cron: '30 6 * * *'    # 23:30 PT (final late sweep for evening matches)
   workflow_dispatch: {}         # ...or run it on demand from the Actions tab
 
 permissions:
