@@ -13,6 +13,7 @@ const OPEN=new Set();   // keys "side:pi" of expanded cards — survives re-rend
 const LIB_KEY = 'pr.matches.v1';   // localStorage key (versioned)
 const LIB_CAP = 40;                // max stored matches (oldest evicted)
 let   VIEW    = 'match';            // 'match' | 'tournament' (top-level mode)
+let   BUNDLED = [];                 // published/official matches loaded from matches.json (read-only)
 
 /* ---------- stable match id ---------- */
 function matchId(m){
@@ -73,6 +74,25 @@ function libUpsert(match){
 function libRemove(id){
   const arr = libLoad().filter(r => r.id !== id);
   libWrite(arr);
+}
+
+/* ---------- bundled "official" matches (matches.json) + merged tournament source ---------- */
+async function loadBundled(){
+  try{
+    const res = await fetch('matches.json', { cache:'no-cache' });
+    if(!res.ok) return;
+    const arr = await res.json();
+    if(!Array.isArray(arr)) return;
+    BUNDLED = arr.filter(validMatch).map(m => ({ id: matchId(m), savedAt: 0, match: m, official: true }));
+  }catch(_){ /* offline or not present → no bundled matches, app still works */ }
+  renderSavedStrip();
+  if(VIEW!=='tournament') showView('landing');   // reveal the Match/Tournament toggle now that matches exist
+}
+// the user's own saved matches PLUS the official set (a user's upload of the same fixture wins)
+function allRecords(){
+  const user = libLoad();
+  const ids = new Set(user.map(r => r.id));
+  return user.concat(BUNDLED.filter(r => !ids.has(r.id)));
 }
 
 /* ---------- rating color scale ---------- */
@@ -219,7 +239,7 @@ function showView(v){
   $('#btnNew').style.display     = (v==='results' || v==='tournament') ? 'inline-flex' : 'none';
   $('#exportWrap').style.display = inMatch ? 'inline-flex' : 'none';   // export is single-match only
   // mode toggle: visible whenever we have a library AND we're on a content view (not loading)
-  const hasLib = libLoad().length > 0;
+  const hasLib = allRecords().length > 0;
   const showToggle = hasLib && (v==='results' || v==='tournament' || v==='landing');
   $('#modeToggle').style.display = showToggle ? 'inline-flex' : 'none';
   $('#mtMatch').classList.toggle('on', v!=='tournament');
@@ -349,7 +369,7 @@ function perfCmp(a,b){
 
 // Flatten every saved match into per-appearance performance rows.
 function tournamentRows(){
-  const lib = libLoad();
+  const lib = allRecords();
   const rows = [];
   lib.forEach(rec => {
     const m = rec.match;
@@ -423,12 +443,12 @@ function buildTournament(){
   // TEAM OF THE TOURNAMENT: best XI in 1-4-3-3
   const xi = pickBestXI(rows);
 
-  return { rows, performances, leaderboard, xi, count: libLoad().length };
+  return { rows, performances, leaderboard, xi, count: allRecords().length };
 }
 
 /* ---------- open a saved match (no re-parse) ---------- */
 function openSavedMatch(id){
-  const rec = libLoad().find(r => r.id === id);
+  const rec = allRecords().find(r => r.id === id);
   if(!rec){ toast('That saved match is no longer available.', true); renderSavedStrip(); return; }
   MATCH = stripMatch(rec.match);
   SORT = 'rating';
@@ -444,26 +464,25 @@ function openSavedMatch(id){
 /* ---------- saved-matches strip (landing) ---------- */
 function renderSavedStrip(){
   const strip = $('#savedStrip'); if(!strip) return;
-  const lib = libLoad();
+  const lib = allRecords();
   if(!lib.length){ strip.style.display='none'; strip.innerHTML=''; return; }
   strip.style.display='block';
   const items = lib.map(rec=>{
     const m = rec.match;
     const title = `${tidyName(m.teamA)} ${m.scoreA}–${m.scoreB} ${tidyName(m.teamB)}`;
     const sub   = m.date ? m.date : `${m.home.players.length+m.away.players.length} players`;
-    return `<button class="saved-card" data-open="${rec.id}">
+    const x = rec.official ? '' : `<span class="sc-x" data-remove="${rec.id}" role="button" aria-label="Remove" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><path d="M6 6l12 12M18 6L6 18"/></svg></span>`;
+    return `<button class="saved-card${rec.official?' official':''}" data-open="${rec.id}">
       <div class="sc-main">
         <div class="sc-title">${title}</div>
         <div class="sc-sub">${sub}</div>
       </div>
-      <span class="sc-x" data-remove="${rec.id}" role="button" aria-label="Remove" title="Remove">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </span>
+      ${x}
     </button>`;
   }).join('');
   strip.innerHTML =
     `<div class="saved-head">
-       <span class="saved-lbl">Saved matches · ${lib.length}</span>
+       <span class="saved-lbl">Matches · ${lib.length}</span>
        <button class="saved-tourn" id="savedToTourn">View tournament →</button>
      </div>
      <div class="saved-row">${items}</div>`;
@@ -861,4 +880,5 @@ async function exportImage(){
 
 renderSavedStrip();
 showView('landing');
+loadBundled();   // pull in the published "official" tournament (matches.json), then refresh
 })();

@@ -45,7 +45,7 @@ Click **Export** (top right) for:
 
 ## 5. Build a tournament
 
-Every match you rate is **remembered**, so they stack up. Switch the **Match / Tournament** toggle (top) to see:
+The site comes **pre-loaded with every completed match so far**, and the matches you rate are remembered too — so the tournament is always populated. Switch the **Match / Tournament** toggle (top) to see:
 
 - **Team of the Tournament** — the best XI across all your matches.
 - **Top Performances** — the highest single-match ratings.
