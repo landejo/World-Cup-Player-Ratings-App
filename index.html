@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Player Ratings · FIFA Post-Match Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#070809; --surface:#0E1013; --surface-2:#15181D; --elev:#1B1F26;
+  --line:#23272F; --line-2:#2E333D;
+  --hi:#F4F6F8; --mid:#9AA1AD; --low:#646B77; --faint:#444B55;
+  --pitch:#00C46A; --pitch-2:#13E089; --ink:#03130B;
+  --grad:linear-gradient(120deg,#00C46A,#22d3ee 55%,#6366f1);
+  --r-sm:7px; --r-md:12px; --r-lg:18px; --r-xl:26px;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 12px 30px -16px rgba(0,0,0,.7);
+  --shadow-lg:0 30px 80px -24px rgba(0,0,0,.85);
+  --ease:cubic-bezier(.4,0,.2,1); --spring:cubic-bezier(.34,1.56,.64,1);
+  --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--hi);font-family:var(--sans);font-size:14px;line-height:1.45;letter-spacing:-.01em;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(1100px 560px at 82% -10%,rgba(0,196,106,.10),transparent 60%),radial-gradient(900px 520px at 8% 0%,rgba(99,102,241,.09),transparent 60%)}
+button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+::selection{background:rgba(0,196,106,.28)}
+
+/* header */
+header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:16px;padding:12px clamp(14px,3vw,30px);
+  background:rgba(7,8,9,.7);backdrop-filter:blur(18px) saturate(1.4);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.logo{width:38px;height:38px;border-radius:11px;background:var(--grad);display:grid;place-items:center;flex:0 0 auto;box-shadow:0 6px 18px -6px rgba(0,196,106,.5)}
+.logo svg{width:21px;height:21px}
+.brand h1{font-size:14.5px;font-weight:800;margin:0;letter-spacing:-.02em;line-height:1.1}
+.brand .sub{font-size:11px;color:var(--low);font-weight:600;letter-spacing:.02em}
+.spacer{flex:1}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--mid);font-weight:600;font-size:12.5px;padding:8px 14px;border-radius:10px;display:inline-flex;align-items:center;gap:7px;transition:.16s var(--ease);white-space:nowrap}
+.btn:hover{color:var(--hi);border-color:var(--line-2);background:var(--surface-2)}
+.btn svg{width:15px;height:15px}
+.btn-accent{background:var(--pitch);color:var(--ink);border-color:transparent}
+.btn-accent:hover{background:var(--pitch-2);color:var(--ink)}
+
+/* export menu */
+.export-wrap{position:relative}
+#btnExport .caret{margin-left:-1px;opacity:.7;transition:transform .18s var(--ease)}
+.export-wrap.open #btnExport .caret{transform:rotate(180deg)}
+.export-wrap.open #btnExport{color:var(--hi);border-color:var(--line-2);background:var(--surface-2)}
+.export-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:60;min-width:236px;
+  background:var(--elev);border:1px solid var(--line-2);border-radius:14px;padding:6px;
+  box-shadow:var(--shadow-lg);opacity:0;transform:translateY(-6px) scale(.98);transform-origin:top right;
+  pointer-events:none;transition:.18s var(--spring)}
+.export-wrap.open .export-menu{opacity:1;transform:none;pointer-events:auto}
+.export-item{width:100%;display:flex;align-items:center;gap:11px;text-align:left;
+  padding:9px 10px;border-radius:9px;color:var(--mid);transition:.14s var(--ease)}
+.export-item:hover{background:var(--surface-2);color:var(--hi)}
+.export-item svg{width:18px;height:18px;flex:0 0 auto;color:var(--low)}
+.export-item:hover svg{color:var(--pitch)}
+.export-item .ei-t{font-size:13px;font-weight:700;line-height:1.2}
+.export-item .ei-s{font-size:11px;color:var(--low);font-weight:600;margin-top:1px}
+.export-item:hover .ei-s{color:var(--mid)}
+.export-div{height:1px;background:var(--line);margin:5px 8px}
+@media(max-width:560px){
+  .export-menu{right:auto;left:0;transform-origin:top left}
+  #btnExport{margin-left:auto}
+}
+/* disabled mode-toggle tab (e.g. "Match" on the landing page with no live match) reads as inert, not active */
+.mode-toggle button:disabled{opacity:.4;cursor:default;background:transparent;box-shadow:none;color:var(--low)}
+
+main{position:relative;z-index:1;max-width:1500px;margin:0 auto;padding:clamp(16px,3vw,30px)}
+
+/* ---------- landing ---------- */
+.landing{display:flex;flex-direction:column;align-items:center;text-align:center;padding:min(9vh,80px) 16px 60px;animation:fade .5s var(--ease)}
+@keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.landing .eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--pitch);margin-bottom:16px}
+.landing h2{font-size:clamp(30px,6vw,52px);font-weight:900;letter-spacing:-.035em;line-height:1.02;margin:0;max-width:16ch}
+.landing h2 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.landing p.lede{color:var(--mid);font-size:15px;max-width:54ch;margin:18px 0 0;line-height:1.55}
+.drop{margin-top:36px;width:min(560px,92vw);border:2px dashed var(--line-2);border-radius:var(--r-xl);background:linear-gradient(180deg,var(--surface),#0A0C0E);
+  padding:40px 28px;transition:.22s var(--ease);cursor:pointer;position:relative;overflow:hidden}
+.drop:hover,.drop.over{border-color:var(--pitch);background:linear-gradient(180deg,rgba(0,196,106,.07),#0A0C0E);transform:translateY(-2px)}
+.drop .ic{width:58px;height:58px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;margin:0 auto 16px;transition:.22s var(--spring)}
+.drop:hover .ic{background:var(--grad);border-color:transparent;transform:scale(1.06)}
+.drop .ic svg{width:26px;height:26px;color:var(--mid)}
+.drop:hover .ic svg{color:var(--ink)}
+.drop .t{font-weight:700;font-size:16px}
+.drop .s{color:var(--low);font-size:12.5px;margin-top:5px}
+.samples{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center}
+.samples .lbl{font-size:12px;color:var(--low);font-weight:600}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--mid);font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;transition:.16s var(--ease)}
+.chip:hover{color:var(--hi);border-color:var(--pitch);background:var(--surface-2)}
+.feats{margin-top:48px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:min(820px,95vw)}
+.feat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:18px;text-align:left}
+.feat .fi{font-size:20px;margin-bottom:9px}
+.feat h4{margin:0 0 5px;font-size:13.5px;font-weight:700}
+.feat p{margin:0;font-size:12px;color:var(--mid);line-height:1.5}
+
+/* loading */
+.loading{display:none;flex-direction:column;align-items:center;justify-content:center;padding:120px 20px;gap:22px;animation:fade .3s}
+.loading.show{display:flex}
+.spinner{width:54px;height:54px;border-radius:50%;border:3px solid var(--line-2);border-top-color:var(--pitch);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading .ltxt{font-weight:600;color:var(--mid);font-size:13.5px}
+.loading .lstep{font-family:var(--mono);font-size:11.5px;color:var(--low)}
+
+/* ---------- results ---------- */
+.results{display:none}
+.results.show{display:block;animation:fade .45s var(--ease)}
+.scoreboard{position:relative;border-radius:var(--r-xl);overflow:hidden;border:1px solid var(--line);background:var(--surface);margin-bottom:20px}
+.scoreboard .glow{position:absolute;inset:0;background:radial-gradient(700px 300px at 50% -40%,rgba(0,196,106,.14),transparent)}
+.sb-inner{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:clamp(12px,4vw,46px);padding:26px clamp(16px,4vw,40px)}
+.sb-team{display:flex;flex-direction:column;gap:7px;min-width:0}
+.sb-team.home{align-items:flex-start;text-align:left}
+.sb-team.away{align-items:flex-end;text-align:right}
+.sb-team .tn{font-size:clamp(18px,3.2vw,30px);font-weight:800;letter-spacing:-.03em;line-height:1.05}
+.sb-team .agg{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--mid);background:var(--surface-2);border:1px solid var(--line);padding:4px 10px;border-radius:999px}
+.sb-team .agg b{color:var(--hi)}
+.sb-mid{display:flex;flex-direction:column;align-items:center;gap:6px}
+.sb-score{display:flex;align-items:center;gap:clamp(8px,2.5vw,20px);font-family:var(--mono);font-weight:800;font-size:clamp(34px,7vw,58px);letter-spacing:-.02em;line-height:1}
+.sb-score .dash{color:var(--faint);font-size:.6em}
+.sb-meta{font-size:11.5px;color:var(--low);font-weight:600;text-align:center;max-width:30ch}
+.sb-meta .v{display:block;color:var(--faint);margin-top:2px;font-size:10.5px}
+
+/* toolbar */
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.seg{display:flex;gap:3px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:3px}
+.seg button{font-size:12.5px;font-weight:600;color:var(--mid);padding:6px 13px;border-radius:8px;transition:.15s var(--ease)}
+.seg button.on{background:var(--elev);color:var(--hi);box-shadow:var(--shadow)}
+.tb-label{font-size:11.5px;color:var(--low);font-weight:600}
+.motm-banner{display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,rgba(0,196,106,.12),transparent);border:1px solid rgba(0,196,106,.25);border-radius:12px;padding:9px 14px;margin-left:auto}
+.motm-banner .star{font-size:16px}
+.motm-banner .mt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--pitch)}
+.motm-banner .mn{font-weight:700;font-size:13.5px}
+.motm-banner .mr{font-family:var(--mono);font-weight:800;color:var(--pitch)}
+
+/* teams grid */
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.team-col h3{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:800;margin:0 0 12px;letter-spacing:-.01em}
+.team-col h3 .gauge{margin-left:auto;display:flex;align-items:center;gap:8px}
+.gauge .num{font-family:var(--mono);font-size:15px;font-weight:800}
+.gauge .bar{width:70px;height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.gauge .fill{height:100%;border-radius:4px;background:var(--grad)}
+.poscluster{margin-bottom:6px}
+.poshead{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);padding:8px 4px 6px}
+
+/* player card */
+.pcard{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:.16s var(--ease);position:relative}
+.pcard:hover{border-color:var(--line-2);background:var(--surface-2)}
+.pcard.motm{border-color:rgba(0,196,106,.4);background:linear-gradient(90deg,rgba(0,196,106,.07),var(--surface))}
+.pcard .rk{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--faint);width:16px;text-align:center;flex:0 0 auto}
+.pcard .who{flex:1;min-width:0}
+.pcard .who .nm{font-weight:700;font-size:14px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px}
+.pcard .who .nm .star{font-size:12px}
+.pcard .who .meta{display:flex;align-items:center;gap:8px;margin-top:3px}
+.poschip{font-family:var(--mono);font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:5px;letter-spacing:.03em}
+.poschip.GK{background:#3b2a06;color:#f5b544}.poschip.DF{background:#06283b;color:#4cb8f5}
+.poschip.MF{background:#07331e;color:#3ad98a}.poschip.FW{background:#3b0820;color:#f56aa0}
+.pcard .who .mn{font-family:var(--mono);font-size:11px;color:var(--low);font-weight:600}
+.pcard .who .note{font-size:11.5px;color:var(--mid);margin-top:5px;line-height:1.45;display:none}
+.pcard.open .who .note{display:block}
+.pcard .who .note b{color:var(--hi);font-weight:600}
+.rchip{flex:0 0 auto;width:50px;height:50px;border-radius:12px;display:grid;place-items:center;position:relative;font-family:var(--mono);font-weight:800;font-size:19px;color:#fff;letter-spacing:-.04em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.rchip .pm{position:absolute;bottom:-7px;font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:5px;background:var(--surface-2);border:1px solid var(--line);color:var(--mid)}
+.expand-ic{flex:0 0 auto;color:var(--faint);transition:transform .2s var(--ease)}
+.pcard.open .expand-ic{transform:rotate(180deg)}
+.statgrid{display:none;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:6px;margin-top:9px}
+.pcard.open .statgrid{display:grid}
+.statgrid .st{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.statgrid .st .k{font-size:9px;color:var(--low);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.statgrid .st .v{font-family:var(--mono);font-size:13px;font-weight:700;margin-top:1px}
+
+/* inline card editor (Feature B) */
+.pedit{display:none;grid-template-columns:auto auto;gap:10px 14px;align-items:center;margin-top:10px;
+  padding-top:10px;border-top:1px solid var(--line)}
+.pcard.open .pedit{display:grid}
+.pedit .pe-field{display:flex;align-items:center;gap:7px}
+.pedit .pe-lbl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--low)}
+.pedit select,.pedit input{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--hi);
+  background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 8px;transition:.15s var(--ease);
+  -webkit-appearance:none;appearance:none}
+.pedit select{padding-right:24px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA1AD' stroke-width='2.4'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 7px center}
+.pedit input{width:62px;text-align:center}
+.pedit select:hover,.pedit input:hover,.pedit select:focus,.pedit input:focus{border-color:var(--line-2);outline:none}
+.pedit select:focus,.pedit input:focus{border-color:var(--pitch)}
+.pedit input::-webkit-outer-spin-button,.pedit input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.pedit input[type=number]{-moz-appearance:textfield}
+.pedit select:disabled{opacity:.55;cursor:default}
+
+/* methodology drawer */
+.drawer-back{position:fixed;inset:0;z-index:120;display:none;background:rgba(4,5,7,.7);backdrop-filter:blur(6px)}
+.drawer-back.show{display:block;animation:fade .2s}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(460px,94vw);background:var(--surface);border-left:1px solid var(--line-2);box-shadow:var(--shadow-lg);padding:24px;overflow-y:auto;transform:translateX(100%);transition:transform .32s var(--spring)}
+.drawer-back.show .drawer{transform:none}
+.drawer h3{margin:0 0 4px;font-size:18px;font-weight:800}
+.drawer .dsub{color:var(--low);font-size:12px;margin-bottom:18px}
+.drawer .mblock{margin-bottom:18px}
+.drawer .mblock h4{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--pitch);margin:0 0 8px}
+.drawer .mblock p{font-size:12.5px;color:var(--mid);line-height:1.55;margin:0 0 8px}
+.drawer .wtable{width:100%;border-collapse:collapse;font-size:11.5px}
+.drawer .wtable th,.drawer .wtable td{text-align:right;padding:5px 7px;border-bottom:1px solid var(--line)}
+.drawer .wtable th:first-child,.drawer .wtable td:first-child{text-align:left;color:var(--mid)}
+.drawer .wtable th{color:var(--low);font-weight:700;font-size:10px;text-transform:uppercase}
+.drawer .wtable td.mono{font-family:var(--mono);color:var(--hi);font-weight:600}
+.drawer-close{position:absolute;top:18px;right:18px;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);color:var(--mid);display:grid;place-items:center}
+.drawer-close:hover{color:var(--hi)}
+.callout{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:12px;color:var(--mid);line-height:1.5}
+.callout b{color:var(--hi)}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--elev);border:1px solid var(--line-2);border-radius:12px;padding:11px 18px;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:.25s var(--spring);z-index:200}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:#f5556680;color:#ff9aa6}
+
+@media(max-width:860px){ .teams{grid-template-columns:1fr} .feats{grid-template-columns:1fr} .motm-banner{margin-left:0;width:100%} }
+@media(max-width:560px){
+  header{flex-wrap:wrap;gap:9px}
+  .brand{flex:0 1 auto}
+  .brand .sub{display:none}
+  .brand h1{font-size:15px;white-space:nowrap}
+  .spacer{display:none}
+  .btn{padding:8px 12px;font-size:12px;margin-left:auto}
+  .btn+.btn{margin-left:0}
+  .landing h2{font-size:32px}
+  .sb-inner{grid-template-columns:1fr;justify-items:center;gap:10px;padding:20px 14px}
+  .sb-mid{order:1}
+  .sb-team{order:2;align-items:center !important;text-align:center !important}
+  .sb-team .tn{font-size:21px}
+  .sb-score{font-size:42px}
+  .sb-meta{max-width:none}
+}
+
+/* ---------- tournament mode ---------- */
+.mode-toggle{margin-left:6px}
+@media(max-width:560px){ .mode-toggle{order:5;margin-left:0;width:100%} }
+
+/* saved-matches strip (landing) */
+.saved-strip{width:min(820px,95vw);margin-top:40px;text-align:left}
+.saved-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.saved-lbl{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--low)}
+.saved-tourn{font-size:12px;font-weight:700;color:var(--pitch);background:none;padding:4px 6px;border-radius:8px;transition:.15s var(--ease)}
+.saved-tourn:hover{background:var(--surface-2)}
+.saved-row{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+.saved-card{flex:0 0 auto;display:flex;align-items:center;gap:12px;min-width:210px;max-width:280px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 12px;text-align:left;transition:.16s var(--ease)}
+.saved-card:hover{border-color:var(--line-2);background:var(--surface-2);transform:translateY(-1px)}
+.saved-card .sc-main{flex:1;min-width:0}
+.saved-card .sc-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.saved-card .sc-sub{font-size:11px;color:var(--low);font-weight:600;margin-top:2px;font-family:var(--mono)}
+.saved-card .sc-x{flex:0 0 auto;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:var(--faint);border:1px solid transparent;transition:.14s var(--ease)}
+.saved-card .sc-x:hover{color:#ff9aa6;border-color:#f5556640;background:var(--bg)}
+
+/* tournament view */
+.tournament{display:none}
+.tournament.show{display:block;animation:fade .45s var(--ease)}
+.t-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px}
+.t-eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--pitch)}
+.t-title{font-size:clamp(22px,4vw,34px);font-weight:900;letter-spacing:-.03em;margin:6px 0 0}
+.t-block{margin-bottom:26px}
+.t-h3{font-size:15px;font-weight:800;letter-spacing:-.01em;margin:0 0 14px;display:flex;align-items:baseline;gap:10px}
+.t-sub{font-size:11px;font-weight:600;color:var(--low);letter-spacing:.02em}
+.t-empty{background:var(--surface);border:1px dashed var(--line-2);border-radius:var(--r-md);padding:22px;color:var(--mid);font-size:13px;text-align:center}
+
+/* shared rating chip in tournament */
+.t-chip{flex:0 0 auto;min-width:46px;height:34px;padding:0 8px;border-radius:10px;display:inline-grid;place-items:center;
+  font-family:var(--mono);font-weight:800;font-size:15px;color:#fff;letter-spacing:-.03em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+
+/* team of the tournament — pitch */
+.tott{background:linear-gradient(180deg,rgba(0,196,106,.06),var(--surface));border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:20px clamp(10px,3vw,26px);display:flex;flex-direction:column;gap:16px}
+.tott-row{display:flex;justify-content:center;gap:clamp(8px,2vw,20px);flex-wrap:wrap}
+.tott-cell{flex:0 1 150px;max-width:170px;display:flex;flex-direction:column;align-items:center;gap:5px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 10px;transition:.16s var(--ease)}
+.tott-cell:hover{border-color:var(--line-2);transform:translateY(-2px)}
+.tott-cell.empty{opacity:.5;border-style:dashed}
+.tott-cell .t-chip{margin:2px 0}
+.tott-cell .tc-name{font-size:13px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tott-cell .tc-team{font-size:10.5px;color:var(--low);font-weight:600;font-family:var(--mono)}
+.tott-cell .muted{color:var(--faint)}
+
+/* leaderboard / top performances rows */
+.t-list{display:grid;gap:8px}
+.t-rowcard{display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 13px;transition:.16s var(--ease)}
+.t-rowcard:hover{border-color:var(--line-2);background:var(--surface-2)}
+.t-rowcard .t-rk{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--faint);width:18px;text-align:center;flex:0 0 auto}
+.t-rowcard .t-rmain{flex:1;min-width:0}
+.t-rowcard .t-rname{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t-rowcard .t-rmeta{font-size:11.5px;color:var(--mid);font-weight:600;margin-top:3px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.t-rowcard .t-rmeta b{color:var(--hi)}
+.t-rowcard .t-vs{color:var(--low)}
+@media(max-width:560px){ .tott-cell{flex-basis:120px} .t-title{font-size:24px} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#03130b" stroke-width="2.4"><path d="M12 2l3 5 5.5.8-4 4 1 5.5L12 19l-5.5 3.3 1-5.5-4-4L9 7z"/></svg></div>
+    <div><h1>Match Ratings</h1><div class="sub">FIFA Post-Match Engine · v4.4</div></div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="btnMethod"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9.2"/><path d="M9.2 9.4a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4"/><circle cx="12" cy="17.2" r="1.1" fill="currentColor" stroke="none"/></svg>How it works</button>
+
+  <div class="mode-toggle seg" id="modeToggle" style="display:none">
+    <button id="mtMatch" class="on">Match</button>
+    <button id="mtTourn">Tournament</button>
+  </div>
+
+  <div class="export-wrap" id="exportWrap" style="display:none">
+    <button class="btn" id="btnExport" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+      Export
+      <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="12" height="12"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="export-menu" id="exportMenu" role="menu" aria-label="Export options">
+      <button class="export-item" id="expImage" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5-5L5 20"/></svg>
+        <div class="ei-tx"><div class="ei-t">Save as image</div><div class="ei-s">Shareable PNG card</div></div>
+      </button>
+      <button class="export-item" id="expData" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+        <div class="ei-tx"><div class="ei-t">Save data</div><div class="ei-s">Editable .json backup</div></div>
+      </button>
+      <div class="export-div"></div>
+      <button class="export-item" id="expOpen" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.2h7A1.5 1.5 0 0 1 19 9.7"/><path d="M3 7.5V18a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7.5a1.5 1.5 0 0 0-1.5-1.5H10"/></svg>
+        <div class="ei-tx"><div class="ei-t">Open .json</div><div class="ei-s">Restore a saved match</div></div>
+      </button>
+    </div>
+  </div>
+
+  <button class="btn btn-accent" id="btnNew" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New match</button>
+</header>
+
+<main>
+  <!-- LANDING -->
+  <section class="landing" id="landing">
+    <div class="eyebrow">Weighted-Action Player Rater</div>
+    <h2>Drop a match report.<br><span class="g">Get every player rated.</span></h2>
+    <p class="lede">Upload a FIFA <b>Post-Match Summary</b> PDF and the engine reads the stats, runs the v4.4 weighted-action model, and rates all 32 players out of 10 — no manual entry.</p>
+
+    <div class="drop" id="drop">
+      <input type="file" id="fileIn" accept="application/pdf,.pdf" hidden>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 16v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg></div>
+      <div class="t">Drop your PDF here, or click to browse</div>
+      <div class="s">FIFA Post-Match Summary Report (PMSR) · processed locally in your browser</div>
+    </div>
+
+    <div class="samples">
+      <span class="lbl">No file handy? Try a sample:</span>
+      <button class="chip" data-sample="sample-bra-mar.pdf">⚽ Brazil 1–1 Morocco</button>
+      <button class="chip" data-sample="sample-qat-sui.pdf">⚽ Qatar 1–1 Switzerland</button>
+      <button class="chip" data-sample="sample-usa-par.pdf">⚽ USA 4–1 Paraguay</button>
+      <button class="chip" data-sample="sample-can-bih.pdf">⚽ Canada 1–1 Bosnia</button>
+    </div>
+
+    <div class="feats">
+      <div class="feat"><div class="fi">📄→📊</div><h4>Upload &amp; run</h4><p>Reads the official PMSR tables directly — passing, line breaks, duels, pressures, goalkeeping. Nothing to type in.</p></div>
+      <div class="feat"><div class="fi">⚖️</div><h4>Replicable model</h4><p>Per-position weighted actions, calibrated to the workbook at 0.20 mean error. Every score is explainable.</p></div>
+      <div class="feat"><div class="fi">🔒</div><h4>Private &amp; offline</h4><p>The PDF never leaves your device, and ratings run with no network once loaded — pdf.js is bundled in.</p></div>
+    </div>
+
+    <div class="saved-strip" id="savedStrip" style="display:none"></div>
+  </section>
+
+  <!-- LOADING -->
+  <section class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="ltxt">Reading the match report…</div>
+    <div class="lstep mono" id="lstep">parsing pages</div>
+  </section>
+
+  <!-- TOURNAMENT -->
+  <section class="tournament" id="tournament"></section>
+
+  <!-- RESULTS -->
+  <section class="results" id="results">
+    <div class="scoreboard">
+      <div class="glow"></div>
+      <div class="sb-inner">
+        <div class="sb-team home"><div class="tn" id="hName">Home</div><div class="agg">Team rating <b id="hAgg">–</b>/100</div></div>
+        <div class="sb-mid">
+          <div class="sb-score"><span id="hScore">0</span><span class="dash">–</span><span id="aScore">0</span></div>
+          <div class="sb-meta"><span id="mDate"></span><span class="v" id="mVenue"></span></div>
+        </div>
+        <div class="sb-team away"><div class="tn" id="aName">Away</div><div class="agg">Team rating <b id="aAgg">–</b>/100</div></div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <span class="tb-label">Sort</span>
+      <div class="seg" id="sortSeg">
+        <button data-sort="rating" class="on">Rating</button>
+        <button data-sort="position">Position</button>
+        <button data-sort="minutes">Minutes</button>
+      </div>
+      <div class="motm-banner" id="motm" style="display:none">
+        <span class="star">⭐</span>
+        <div><div class="mt">Player of the match</div><div><span class="mn" id="motmName"></span></div></div>
+        <span class="mr" id="motmRating"></span>
+      </div>
+    </div>
+
+    <div class="teams">
+      <div class="team-col" id="homeCol"></div>
+      <div class="team-col" id="awayCol"></div>
+    </div>
+  </section>
+</main>
+
+<!-- methodology drawer -->
+<div class="drawer-back" id="drawerBack">
+  <div class="drawer">
+    <button class="drawer-close" id="drawerClose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h3>How the rating works</h3>
+    <div class="dsub">Replicable Weighted-Action Model · v4.4</div>
+
+    <div class="mblock"><h4>The idea</h4>
+      <p>Every player starts from a position-specific <b>par</b> and earns credit for weighted actions pulled straight from the FIFA Post-Match Summary — progressive passing, line breaks, ball progression, take-ons, duels, blocks, interceptions, pressures and clearances. Goalkeepers run on a separate save-quality + distribution formula.</p>
+      <p>Scores are floored at <b>5.0</b> for any appearance, a goal is worth up to <b>+1.8</b> (scorers floored at <b>7.0</b>), and the result nudges everyone by <b>+0.30 / 0 / −0.30</b> for a win / draw / loss.</p>
+    </div>
+    <div class="mblock"><h4>Position weights (relative)</h4>
+      <table class="wtable" id="wtable"><thead><tr><th>Action</th><th>DF</th><th>MF</th><th>FW</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="mblock"><h4>Team rating</h4>
+      <p>The /100 figure is the minutes-weighted mean of all player ratings (including the result adjustment), ×10 — so dominant, winning teams score higher.</p>
+    </div>
+    <div class="callout">Calibrated on three reference-rated matches and cross-validated to a <b>~0.32</b> mean absolute error — <b>86%</b> of players land within 0.5 of the human grade (the model's own target is 0.51). Positions and minutes are read straight from the official team sheet — tap any player card to see the full stat breakdown behind their score.</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="jsonIn" accept="application/json,.json" hidden>
+
+<script src="vendor/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/pdf.worker.min.js';</script>
+<script src="core.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
